@@ -1,0 +1,57 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=HIDClass
+ClassGuid={745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
+Provider=%Provider%
+CatalogFile=TanitaHid.cat
+DriverVer=11/23/2026,0.1.0.0
+PnpLockdown=1
+
+[Manufacturer]
+%Provider%=Models,NTamd64.10.0...16299
+
+[Models.NTamd64.10.0...16299]
+%DeviceName%=Install,Root\TanitaHid
+
+[Install.NT]
+CopyFiles=DriverCopy
+
+[Install.NT.HW]
+AddReg=DeviceSettings
+
+[DeviceSettings]
+HKR,,"LowerFilters",0x00010000,"vhf"
+HKR,,"Security",0,"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GW;;;IU)"
+
+[Install.NT.Services]
+AddService=TanitaHid,0x00000002,Service
+
+[Service]
+DisplayName=%DeviceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%13%\TanitaHid.sys
+
+[Install.NT.Wdf]
+KmdfService=TanitaHid,Wdf
+
+[Wdf]
+KmdfLibraryVersion=1.15
+
+[DestinationDirs]
+DriverCopy=13
+
+[DriverCopy]
+TanitaHid.sys
+
+[SourceDisksNames]
+1=%Disk%
+
+[SourceDisksFiles]
+TanitaHid.sys=1
+
+[Strings]
+Provider="Tanita Bridge Project"
+DeviceName="Twin Stick Virtual HID Gamepad"
+Disk="Twin Stick Virtual HID Gamepad Driver"

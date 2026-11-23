@@ -1,0 +1,27 @@
+{
+  "device": {
+    "name_contains": "",
+    "joystick_index": 0,
+    "axes": {"left_x": 0, "left_y": 1, "right_x": 2, "right_y": 3},
+    "invert": {"left_x": false, "left_y": true, "right_x": false, "right_y": true},
+    "button_indices": {
+      "left_trigger": 0, "right_trigger": 1,
+      "left_turbo": 2, "right_turbo": 3,
+      "left_aux": 4, "right_aux": 5,
+      "target_assist": 6, "repair": 7, "scan": 8,
+      "boost_toggle": 9, "shift_access": 10, "pause": 11
+    }
+  },
+  "controls": {
+    "deadzone": 0.15,
+    "gesture_threshold": 0.60,
+    "turn_speed": 0.75,
+    "turbo_chord_sec": 0.09,
+    "assault_boost_pulse_sec": 0.085,
+    "poll_hz": 125,
+    "extra_buttons": {
+      "target_assist": "RS", "repair": "UP", "scan": "DOWN",
+      "boost_toggle": "B", "shift_access": "Y", "pause": "START"
+    }
+  }
+}

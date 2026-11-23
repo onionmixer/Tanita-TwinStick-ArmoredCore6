@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.vs/
+build/
+release/
+*.pfx
+*.cer
+*.p12
+*.obj
+*.pdb
+*.exe
+*.sys
+*.cat
+*.cab
+*.log
