@@ -11,6 +11,10 @@ The app runs on Windows without Python, SDL, or a separate Visual C++ Redistribu
 
 See [HOWTOUSE.md](HOWTOUSE.md) for setup, controls, AC TEST, and restoring normal boot after driver testing.
 
+### Turning in place
+
+AC6's Type A controller layout assigns movement to the left stick and camera control to the right stick. It has no independent input for turning the AC in place. Pushing one Twin Stick lever forward and the other backward therefore rotates the camera. [Official AC6 controller layout](https://www.fromsoftware.jp/manual/armoredcore6/win/operation.html)
+
 ## Project layout
 
 | Path | Contents |

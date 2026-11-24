@@ -17,7 +17,7 @@ Lever combinations are listed as left lever / right lever.
 | --- | --- |
 | Both levers in the same direction, including diagonals | Move in that direction |
 | One lever alone or a mismatched direction outside the combinations below | No movement |
-| Behind / ahead, or ahead / behind | Rotate the camera left or right |
+| Back / forward, or forward / back | Rotate the camera left or right |
 | Outward (← / →) | Jump or ascend while held |
 | Inward (→ / ←) | Release the ascent input from the lever gesture |
 | Left / right grip trigger | Left / right hand weapon |
@@ -29,6 +29,8 @@ Lever combinations are listed as left lever / right lever.
 | SHARE / OPTION / PS | Photo mode / pause menu / target assist |
 
 The two gray buttons on each grip share the same input. Press both TURBO buttons nearly together for camera control. A single press held for 90 ms sends an 85 ms L3 pulse, so pressing the second button late can trigger assault boost first. A short single tap sends the pulse on release.
+
+AC6's Type A layout has no independent turn-in-place control for the AC. The opposed fore-and-aft lever gesture sends horizontal right-stick input to rotate the camera. [Official AC6 controller layout](https://www.fromsoftware.jp/manual/armoredcore6/win/operation.html)
 
 ## Verify Windows input
 
