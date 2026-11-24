@@ -40,11 +40,13 @@ Select **Start input test**, release all controls, and follow the prompts for ei
 
 ### Change a button assignment
 
-With output and the guided test stopped, choose an action under **Button Assignment (AC6)** and click **Capture input**. Release the Twin Stick controls and press one assignable physical button within four seconds. The modal shows the countdown, live lever and button values, and the detected button. If the deadline passes or you select **Cancel**, the modal displays **Input assign canceled** for one second and closes without changing the mapping. After a button is detected, select **Save mapping** to apply the assignment or **Retry** for another capture.
+With output and the guided test stopped, choose an action under **Button Assignment (AC6)** and click **Capture input**. Release the controls, then press one assignable button or move both levers within four seconds. Hold both levers briefly until the modal identifies both directions. If the deadline passes or you select **Cancel**, the modal displays **Input assign canceled** for one second and closes without changing the mapping. Select **Save mapping** after detection, or **Retry** for another capture.
 
-The list and output preview reflect the saved binding, and Windows remembers it for your user account. Choose **Unassigned** and capture a button to disable it. **Restore defaults** restores the full factory mapping after confirmation.
+The output preview reflects the saved binding, and Windows remembers it for your user account. A custom lever pair replaces the default behavior of that exact pair in combat mode. Other pairs and camera mode retain their existing behavior. Choose **Unassigned** to suppress an input or **Restore default lever behavior** to restore one pair. **Restore defaults** restores the full factory mapping after confirmation.
 
-Both gray buttons on the same grip share a physical signal and therefore share one assignment. Lever gestures and the single- and dual-TURBO behavior are fixed. The editor changes the native app's mapping for both output drivers.
+The eight **Move** actions send directional input on the virtual Xbox left stick in combat mode. The four **D-pad** actions send separate digital buttons for repair, scan, and menu navigation.
+
+Both gray buttons on the same grip share a physical signal and therefore share one assignment. Single- and dual-TURBO behavior is fixed. The editor changes the native app's mapping for both output drivers.
 
 Open `joy.cpl` from Windows Run. In the virtual gamepad's **Properties**, press the panel × button and push both levers to the right. The button and movement axis should register. Select **Xbox 360 Controller** for ViGEmBus, or the **VHF** gamepad for the custom driver. The physical **USB GAMESTICK** entry shows raw input from the Twin Stick.
 

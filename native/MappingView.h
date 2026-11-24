@@ -15,13 +15,24 @@ public:
 
     void LoadBindings() {
         Bindings stored;
-        DWORD size = static_cast<DWORD>(sizeof(stored.actions));
-        if (RegGetValueW(HKEY_CURRENT_USER, kSettings, kBindingsValue, RRF_RT_REG_BINARY,
-                         nullptr, stored.actions.data(), &size) != ERROR_SUCCESS ||
-            size != sizeof(stored.actions)) return;
-        for (auto action : stored.actions) {
-            if (action >= OutputAction::Count) return;
+        Bindings::StoredActions data{};
+        DWORD size = static_cast<DWORD>(sizeof(data));
+        const auto result = RegGetValueW(HKEY_CURRENT_USER, kSettings, kBindingsValue, RRF_RT_REG_BINARY,
+                                         nullptr, data.data(), &size);
+        if (result == ERROR_FILE_NOT_FOUND) {
+            // V1 stored only the button slots. The missing lever pairs keep their defaults.
+            size = static_cast<DWORD>(sizeof(stored.actions));
+            if (RegGetValueW(HKEY_CURRENT_USER, kSettings, L"ButtonBindingsV1", RRF_RT_REG_BINARY,
+                             nullptr, stored.actions.data(), &size) != ERROR_SUCCESS ||
+                size != sizeof(stored.actions)) return;
+        } else {
+            if (result != ERROR_SUCCESS || size != sizeof(data)) return;
+            std::copy_n(data.begin(), stored.actions.size(), stored.actions.begin());
+            std::copy_n(data.begin() + stored.actions.size(), stored.leverActions.size(), stored.leverActions.begin());
         }
+        for (auto action : stored.actions)
+            if (action >= OutputAction::Count || action == OutputAction::DefaultLever) return;
+        for (auto action : stored.leverActions) if (action >= OutputAction::Count) return;
         bindings_ = stored;
     }
 
@@ -141,7 +152,7 @@ private:
     static constexpr int kLeftGrip = 301, kRightGrip = 302, kTest = 303, kSkip = 304;
     static constexpr int kAction = 305, kCapture = 306, kDefaults = 307;
     static constexpr wchar_t kSettings[] = L"Software\\TanitaTwinStickBridge";
-    static constexpr wchar_t kBindingsValue[] = L"ButtonBindingsV1";
+    static constexpr wchar_t kBindingsValue[] = L"InputBindingsV2";
 
     static int BindingSlot(int index) {
         const auto& control = Controls[index];
@@ -168,9 +179,11 @@ private:
         LSTATUS result = RegCreateKeyExW(HKEY_CURRENT_USER, kSettings, 0, nullptr, 0,
                                          KEY_SET_VALUE, nullptr, &key, nullptr);
         if (result == ERROR_SUCCESS) {
+            Bindings::StoredActions data{};
+            auto tail = std::copy(next.actions.begin(), next.actions.end(), data.begin());
+            std::copy(next.leverActions.begin(), next.leverActions.end(), tail);
             result = RegSetValueExW(key, kBindingsValue, 0, REG_BINARY,
-                                    reinterpret_cast<const BYTE*>(next.actions.data()),
-                                    static_cast<DWORD>(sizeof(next.actions)));
+                                    reinterpret_cast<const BYTE*>(data.data()), static_cast<DWORD>(sizeof(data)));
             RegCloseKey(key);
         }
         if (result == ERROR_SUCCESS) {
@@ -188,6 +201,15 @@ private:
         return std::wstring(index >= 17 ? L"Right grip / " : index >= 13 ? L"Left grip / " : L"") + control.name;
     }
 
+    bool HasCapture() const { return capturedControl_ >= 0 || capturedPair_ >= 0; }
+
+    static std::wstring PairName(int pair) {
+        constexpr const wchar_t* directions[]{L"\u2191", L"\u2197", L"\u2192", L"\u2198",
+                                              L"\u2193", L"\u2199", L"\u2190", L"\u2196"};
+        return std::wstring(L"Left lever ") + directions[pair / Bindings::DirectionCount] +
+               L" + Right lever " + directions[pair % Bindings::DirectionCount];
+    }
+
     void StartCapture() {
         const auto action = SendMessageW(actionPicker_, CB_GETCURSEL, 0, 0);
         if (!connected_ || outputActive_ || testing_ || action < 0 ||
@@ -200,6 +222,8 @@ private:
 
     void RetryCapture() {
         capturedControl_ = -1;
+        capturedPair_ = -1;
+        candidatePair_ = -1;
         captureArmed_ = false;
         captureCanceled_ = false;
         captureDeadline_ = Mapper::Clock::now() + std::chrono::seconds(4);
@@ -215,23 +239,34 @@ private:
         }
         if (!connected_ || outputActive_) {
             capturedControl_ = -1;
+            capturedPair_ = candidatePair_ = -1;
             captureDeadline_ = {};
         }
-        if (capturedControl_ < 0 && captureDeadline_ != Mapper::Clock::time_point{} && now >= captureDeadline_) {
+        if (!HasCapture() && captureDeadline_ != Mapper::Clock::time_point{} && now >= captureDeadline_) {
             CancelCapture(now);
             return;
         }
-        const bool waiting = capturedControl_ < 0 && now < captureDeadline_;
+        const bool waiting = !HasCapture() && now < captureDeadline_;
         const bool lever = IsActive(Controls[4]) || IsActive(Controls[9]);
         const bool hat = input_.hat >= 0 && input_.hat < 8;
-        const unsigned count = std::popcount(input_.buttons) + unsigned(hat) + unsigned(lever);
+        const unsigned buttons = std::popcount(input_.buttons) + unsigned(hat);
         if (waiting) {
             // Only capture a fresh input after all controls have returned to neutral.
-            if (!count) {
+            if (!buttons && !lever) {
                 captureArmed_ = true;
+                candidatePair_ = -1;
+                captureWarning_.clear();
             } else if (captureArmed_) {
-                captureArmed_ = false;
-                if (count == 1 && !lever) {
+                if (!buttons && lever) {
+                    const int pair = LeverPairIndex(input_);
+                    if (pair != candidatePair_) {
+                        candidatePair_ = pair;
+                        candidateSince_ = now;
+                    } else if (pair >= 0 && now - candidateSince_ >= std::chrono::milliseconds(100)) {
+                        // Allow the second lever to settle before capturing a cardinal or diagonal pair.
+                        capturedPair_ = pair;
+                    }
+                } else if (buttons == 1 && !lever && capturedAction_ != OutputAction::DefaultLever) {
                     for (int i = 0; i < int(std::size(Controls)); ++i) {
                         const auto& control = Controls[i];
                         const bool matchingHat = control.kind != Kind::Hat || input_.hat == control.value;
@@ -241,20 +276,23 @@ private:
                         }
                     }
                 }
-                if (capturedControl_ < 0)
-                    captureWarning_ = L"Release the controls, then press one assignable button.";
+                if (buttons && !HasCapture()) {
+                    captureArmed_ = false;
+                    candidatePair_ = -1;
+                    captureWarning_ = L"Release the controls. Use one button or both levers.";
+                }
             }
         }
         std::wstring status;
         if (!connected_) status = L"Twin Stick disconnected. Reconnect it and select Retry.";
         else if (outputActive_) status = L"Stop virtual output, then select Retry.";
-        else if (capturedControl_ >= 0) status = captureWarning_.empty() ?
+        else if (HasCapture()) status = captureWarning_.empty() ?
             L"Input detected. Review the result and save the mapping." : captureWarning_;
         else if (!waiting) status = L"Choose Retry to start another four-second capture.";
         else {
             const auto seconds = std::chrono::ceil<std::chrono::seconds>(captureDeadline_ - now).count();
             status = std::to_wstring(seconds) + L" s remaining. ";
-            status += captureWarning_.empty() ? (captureArmed_ ? L"Press one Twin Stick button." :
+            status += captureWarning_.empty() ? (captureArmed_ ? L"Press one button or move both levers." :
                                                                 L"Release the Twin Stick controls.") : captureWarning_;
         }
         SetCaptureText(IDC_CAPTURE_STATUS, status);
@@ -262,9 +300,9 @@ private:
         swprintf_s(live, L"Live: L %+.2f %+.2f  R %+.2f %+.2f  |  Buttons %04X  Hat %d",
                    input_.lx, input_.ly, input_.rx, input_.ry, input_.buttons, input_.hat);
         SetCaptureText(IDC_CAPTURE_LIVE, live);
-        SetCaptureText(IDC_CAPTURE_RESULT, capturedControl_ < 0 ? L"Detected button: none" :
-                       L"Detected button: " + InputName(capturedControl_));
-        EnableWindow(GetDlgItem(captureWindow_, IDOK), capturedControl_ >= 0);
+        SetCaptureText(IDC_CAPTURE_RESULT, capturedPair_ >= 0 ? L"Detected: " + PairName(capturedPair_) :
+                       capturedControl_ >= 0 ? L"Detected: " + InputName(capturedControl_) : L"Detected input: none");
+        EnableWindow(GetDlgItem(captureWindow_, IDOK), HasCapture());
         EnableWindow(GetDlgItem(captureWindow_, IDC_CAPTURE_RETRY), connected_ && !outputActive_);
     }
 
@@ -316,12 +354,18 @@ private:
         if (message == WM_COMMAND) {
             switch (LOWORD(wParam)) {
             case IDOK:
-                if (!view->captureCanceled_ && view->capturedControl_ >= 0 &&
+                if (!view->captureCanceled_ && view->HasCapture() &&
                     view->connected_ && !view->outputActive_) {
                     Bindings next = view->bindings_;
-                    next.actions[BindingSlot(view->capturedControl_)] = view->capturedAction_;
+                    if (view->capturedPair_ >= 0)
+                        next.leverActions[view->capturedPair_] = view->capturedAction_;
+                    else next.actions[BindingSlot(view->capturedControl_)] = view->capturedAction_;
                     if (view->SaveBindings(next)) {
-                        view->selected_ = view->capturedControl_;
+                        if (view->capturedPair_ >= 0) {
+                            view->editStatus_ = PairName(view->capturedPair_) + L": " +
+                                (view->capturedAction_ == OutputAction::DefaultLever ? L"Default behavior restored." :
+                                 OutputLabels[static_cast<unsigned>(view->capturedAction_)]);
+                        } else view->selected_ = view->capturedControl_;
                         EndDialog(dialog, IDOK);
                     } else {
                         view->captureWarning_ = view->editStatus_;
@@ -360,7 +404,7 @@ private:
         if (control.kind == Kind::Button) return Mapper::Pressed(input_, control.value);
         if (control.kind == Kind::Hat) return HatIncludesDirection(input_.hat, control.value);
         const auto [x,y] = Lever(control.value);
-        return std::abs(x) >= .6 || std::abs(y) >= .6;
+        return LeverDirection(x, y) != std::pair{0, 0};
     }
 
     unsigned ActiveInputs() const {
@@ -381,10 +425,8 @@ private:
         if (control.kind == Kind::Hat) return input_.hat == control.value;
         if (control.kind == Kind::Button) return IsActive(control);
         const auto [x,y] = Lever(control.value);
-        if (step.direction == 0) return y >= .6 && std::abs(x) < .6;
-        if (step.direction == 2) return x >= .6 && std::abs(y) < .6;
-        if (step.direction == 4) return y <= -.6 && std::abs(x) < .6;
-        return x <= -.6 && std::abs(y) < .6;
+        constexpr std::pair<int, int> cardinal[]{{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
+        return LeverDirection(x, y) == cardinal[step.direction / 2];
     }
 
     void Advance(bool skipped) {
@@ -686,6 +728,8 @@ private:
     Mapper::Clock::time_point captureCloseAt_{};
     OutputAction capturedAction_{OutputAction::None};
     int capturedControl_{-1};
+    int capturedPair_{-1}, candidatePair_{-1};
+    Mapper::Clock::time_point candidateSince_{};
     bool captureArmed_{}, captureCanceled_{};
     std::wstring captureWarning_;
     HFONT markerFont_{};
