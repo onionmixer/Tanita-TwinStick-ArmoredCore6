@@ -1,5 +1,5 @@
 #pragma once
-#include "Report.h"
+#include "Bindings.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -12,6 +12,12 @@ struct PhysicalInput {
     int hat = 8;
 };
 
+// HID hats report eight clockwise directions, with diagonals between cardinal values.
+inline bool HatIncludesDirection(int hat, int cardinal) {
+    return hat >= 0 && hat < 8 &&
+           (hat == cardinal || (hat + 1) % 8 == cardinal || (hat + 7) % 8 == cardinal);
+}
+
 class Mapper {
 public:
     using Clock = std::chrono::steady_clock;
@@ -21,9 +27,9 @@ public:
         return (input.buttons & (1u << (usage - 1))) != 0;
     }
 
-    TanitaReport Step(const PhysicalInput& input, Clock::time_point now) {
-        const bool leftTurbo = Pressed(input, 7);
-        const bool rightTurbo = Pressed(input, 8);
+    TanitaReport Step(const PhysicalInput& input, Clock::time_point now, const Bindings& bindings = {}) {
+        const bool leftTurbo = Pressed(input, Bindings::LeftTurbo);
+        const bool rightTurbo = Pressed(input, Bindings::RightTurbo);
         const bool turbo = leftTurbo || rightTurbo;
         camera = leftTurbo && rightTurbo;
         if (camera) {
@@ -45,18 +51,15 @@ public:
         previousTurbo_ = turbo;
 
         TanitaReport out{};
-        constexpr std::pair<int, int> buttons[]{
-            {1, 0x4000}, {2, 0x1000}, {3, 0x2000}, {4, 0x8000},
-            {9, 0x0020}, {10, 0x0010}, {11, 0x0100}, {12, 0x0200}, {13, 0x0080}
-        };
-        for (const auto& [usage, bit] : buttons) {
-            if (Pressed(input, usage)) out.buttons |= static_cast<unsigned short>(bit);
+        for (int usage = 1; usage <= 13; ++usage) {
+            if (!Bindings::IsTurbo(usage) && Pressed(input, usage))
+                ApplyOutput(out, bindings.actions[usage - 1]);
         }
-        constexpr unsigned short hats[]{1, 9, 8, 10, 2, 6, 4, 5};
-        if (input.hat >= 0 && input.hat < 8) out.buttons |= hats[input.hat];
+        for (int direction = 0; direction < 8; direction += 2) {
+            if (HatIncludesDirection(input.hat, direction))
+                ApplyOutput(out, bindings.actions[Bindings::HatSlot(direction)]);
+        }
         if (pulse_ && now < *pulse_) out.buttons |= 0x0040;
-        out.leftTrigger = Pressed(input, 5) ? 255 : 0;
-        out.rightTrigger = Pressed(input, 6) ? 255 : 0;
 
         const auto left = Direction(input.lx, input.ly);
         const auto right = Direction(input.rx, input.ry);

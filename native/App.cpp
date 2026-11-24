@@ -6,6 +6,8 @@
 #include <shellapi.h>
 #include <ViGEm/Client.h>
 #include "Mapper.h"
+#include "MappingView.h"
+#include "Resources.h"
 
 #include <cstring>
 #include <string>
@@ -15,6 +17,9 @@ namespace {
 constexpr int kBackend = 100;
 constexpr int kToggle = 101;
 constexpr int kDriverLink = 102;
+constexpr int kMapping = 103;
+constexpr int kTitleSize = 24;
+constexpr int kTitleIconSize = 32;
 constexpr int kClientWidth = 520;
 constexpr int kClientHeight = 364;
 constexpr COLORREF kBackground = RGB(245, 247, 250);
@@ -23,12 +28,20 @@ constexpr COLORREF kMuted = RGB(74, 89, 108);
 constexpr wchar_t kViGEmDownload[] = L"https://github.com/nefarius/ViGEmBus/releases/latest";
 enum class DriverStatus { Unknown, Missing, Stopped, Running };
 
+HICON LoadAppIcon(HINSTANCE instance, int width, int height) {
+    return static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_TANITA), IMAGE_ICON,
+                                         width, height, LR_SHARED));
+}
+
 class App {
 public:
     HWND window{}, backend{}, toggle{}, driverLink{};
     void Initialize() {
-        titleFont_ = MakeFont(24, FW_SEMIBOLD, L"Segoe UI");
+        mapping_.LoadBindings();
+        titleFont_ = MakeFont(kTitleSize, FW_SEMIBOLD, L"Segoe UI");
+        titleIcon_ = LoadAppIcon(GetModuleHandleW(nullptr), kTitleIconSize, kTitleIconSize);
         bodyFont_ = MakeFont(15, FW_NORMAL, L"Segoe UI");
+        buttonFont_ = MakeFont(15, FW_BOLD, L"Segoe UI");
         dataFont_ = MakeFont(14, FW_NORMAL, L"Consolas");
         backend = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
                                24, 85, 320, 150, window, Menu(kBackend), nullptr, nullptr);
@@ -39,9 +52,12 @@ public:
         SendMessageW(backend, CB_SETCURSEL, 0, 0);
         RECT combo{};
         GetWindowRect(backend, &combo);
-        toggle = CreateWindowW(L"BUTTON", L"Start output", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        toggle = CreateWindowW(L"BUTTON", L"Start link", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                               356, 85, 140, combo.bottom - combo.top, window, Menu(kToggle), nullptr, nullptr);
-        SendMessageW(toggle, WM_SETFONT, reinterpret_cast<WPARAM>(bodyFont_), FALSE);
+        SendMessageW(toggle, WM_SETFONT, reinterpret_cast<WPARAM>(buttonFont_), FALSE);
+        HWND mapping = CreateWindowW(L"BUTTON", L"Mapping or Test", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+                                     356, 20, 140, 30, window, Menu(kMapping), nullptr, nullptr);
+        SendMessageW(mapping, WM_SETFONT, reinterpret_cast<WPARAM>(buttonFont_), FALSE);
         driverLink = CreateWindowW(WC_LINK, L"<a>Open official ViGEmBus downloads</a>",
                                    WS_CHILD | WS_TABSTOP | LWS_TRANSPARENT,
                                    258, 331, 238, 22, window, Menu(kDriverLink), nullptr, nullptr);
@@ -63,7 +79,15 @@ public:
         HDC dc = BeginPaint(window, &paint);
         SetBkMode(dc, TRANSPARENT);
         Fill(dc, paint.rcPaint, kBackground);
-        Text(dc, 24, 20, L"TANITA Twin Stick", titleFont_, kText);
+        constexpr int titleLeft = 24, titleTop = 19;
+        if (titleIcon_)
+            DrawIconEx(dc, titleLeft, titleTop, titleIcon_, kTitleIconSize, kTitleIconSize, 0, nullptr, DI_NORMAL);
+        RECT title{titleIcon_ ? titleLeft + kTitleIconSize + 8 : titleLeft, titleTop, 344,
+                   titleTop + kTitleIconSize};
+        const auto oldFont = SelectObject(dc, titleFont_);
+        SetTextColor(dc, kText);
+        DrawTextW(dc, L"TANITA Twin Stick", -1, &title, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(dc, oldFont);
         Text(dc, 24, 62, L"Output device", bodyFont_, kMuted);
 
         Fill(dc, {24, 134, 496, 208}, RGB(255, 255, 255));
@@ -121,7 +145,38 @@ public:
     void ReleaseFonts() {
         DeleteObject(titleFont_);
         DeleteObject(bodyFont_);
+        DeleteObject(buttonFont_);
         DeleteObject(dataFont_);
+    }
+
+    void DrawActionButton(const DRAWITEMSTRUCT& item) const {
+        const int previous = SaveDC(item.hDC);
+        const bool pressed = (item.itemState & ODS_SELECTED) != 0;
+        const COLORREF background = item.CtlID == kToggle
+            ? (pressed ? RGB(12, 25, 51) : RGB(24, 44, 79))
+            : (pressed ? RGB(135, 22, 34) : RGB(188, 24, 37));
+        Fill(item.hDC, item.rcItem, background);
+        SetBkMode(item.hDC, TRANSPARENT);
+        SetTextColor(item.hDC, RGB(255, 255, 255));
+        if (buttonFont_) SelectObject(item.hDC, buttonFont_);
+        wchar_t caption[80]{};
+        GetWindowTextW(item.hwndItem, caption, int(std::size(caption)));
+        RECT label = item.rcItem;
+        DrawTextW(item.hDC, caption, -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        if ((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT)) {
+            InflateRect(&label, -3, -3);
+            DrawFocusRect(item.hDC, &label);
+        }
+        RestoreDC(item.hDC, previous);
+    }
+
+    void OpenMapping() {
+        mapping_.Open(window);
+        Render();
+    }
+
+    bool HandleMappingNavigation(MSG& message) const {
+        return mapping_.HandleNavigation(message);
     }
 
     void Scan() {
@@ -183,7 +238,7 @@ public:
     }
 
     void Tick() {
-        const auto next = mapper_.Step(physical_, Mapper::Clock::now());
+        const auto next = mapper_.Step(physical_, Mapper::Clock::now(), mapping_.CurrentBindings());
         if (std::memcmp(&next, &last_, sizeof(next)) != 0) {
             last_ = next;
             if (Active() && !Write(next)) Stop(L"Output disconnected or write failed");
@@ -247,7 +302,7 @@ public:
         last_ = {};
         message_ = std::move(message);
         EnableWindow(backend, TRUE);
-        SetWindowTextW(toggle, L"Start output");
+        SetWindowTextW(toggle, L"Start link");
         Render();
     }
 
@@ -314,6 +369,7 @@ private:
     }
 
     void Render() {
+        mapping_.Update(physical_, last_, device_ != nullptr, Active());
         wchar_t input[96]{}, output[96]{};
         swprintf_s(input, L"L %+.2f %+.2f   R %+.2f %+.2f   Buttons %04X   Hat %d",
                    physical_.lx, physical_.ly, physical_.rx, physical_.ry, physical_.buttons, physical_.hat);
@@ -346,8 +402,10 @@ private:
     std::wstring renderedInput_, renderedOutput_, renderedMessage_;
     HANDLE renderedDevice_{};
     bool renderedCamera_{};
-    HFONT titleFont_{}, bodyFont_{}, dataFont_{};
+    HFONT titleFont_{}, bodyFont_{}, dataFont_{}, buttonFont_{};
+    HICON titleIcon_{};
     DriverStatus driverStatus_{DriverStatus::Unknown};
+    MappingView mapping_;
 };
 
 App app;
@@ -364,6 +422,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
     case WM_PAINT:
         app.Paint();
         return 0;
+    case WM_DRAWITEM:
+        if (wParam == kMapping || wParam == kToggle) {
+            app.DrawActionButton(*reinterpret_cast<const DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
+        }
+        break;
     case WM_ACTIVATE:
         if (LOWORD(wParam) != WA_INACTIVE) app.RefreshDriverStatus();
         break;
@@ -384,6 +448,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         return 0;
     case WM_COMMAND:
         if (LOWORD(wParam) == kToggle && HIWORD(wParam) == BN_CLICKED) app.Toggle();
+        if (LOWORD(wParam) == kMapping && HIWORD(wParam) == BN_CLICKED) app.OpenMapping();
         return 0;
     case WM_DESTROY:
         KillTimer(window, 1);
@@ -399,12 +464,15 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     const INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LINK_CLASS};
     InitCommonControlsEx(&controls);
-    WNDCLASSW type{};
+    WNDCLASSEXW type{};
+    type.cbSize = sizeof(type);
     type.lpfnWndProc = WindowProc;
     type.hInstance = instance;
     type.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    type.hIcon = LoadAppIcon(instance, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+    type.hIconSm = LoadAppIcon(instance, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
     type.lpszClassName = L"TanitaNativeWindow";
-    if (!RegisterClassW(&type)) return 1;
+    if (!RegisterClassExW(&type)) return 1;
     constexpr DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
     RECT bounds{0, 0, kClientWidth, kClientHeight};
     AdjustWindowRect(&bounds, style, FALSE);
@@ -412,14 +480,23 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
                                 CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
                                 bounds.bottom - bounds.top, nullptr, nullptr, instance, nullptr);
     if (!window) return 1;
+    if (type.hIconSm)
+        SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(type.hIconSm));
+    Gdiplus::GdiplusStartupInput graphicsSetup;
+    ULONG_PTR graphicsToken = 0;
+    if (Gdiplus::GdiplusStartup(&graphicsToken, &graphicsSetup, nullptr) != Gdiplus::Ok) {
+        DestroyWindow(window);
+        return 1;
+    }
     ShowWindow(window, show);
     MSG message{};
     BOOL result = 0;
     while ((result = GetMessageW(&message, nullptr, 0, 0)) > 0) {
-        if (!IsDialogMessageW(window, &message)) {
+        if (!app.HandleMappingNavigation(message) && !IsDialogMessageW(window, &message)) {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
     }
+    Gdiplus::GdiplusShutdown(graphicsToken);
     return result == -1 ? 1 : static_cast<int>(message.wParam);
 }

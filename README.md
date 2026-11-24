@@ -13,11 +13,15 @@ See [HOWTOUSE.md](HOWTOUSE.md) for setup, controls, AC TEST, and restoring norma
 
 ## Screenshots
 
-| Output stopped | Output connected |
-| --- | --- |
-| ![TANITA Twin Stick Bridge with output stopped](docs/images/app-output-stopped.jpg) | ![TANITA Twin Stick Bridge with output connected](docs/images/app-output-connected.jpg) |
+### Main window
 
-The bridge GUI before and after pressing **Start output** with the ViGEmBus (Xbox 360) device selected.
+![TANITA Twin Stick Bridge main window with the controller detected and output stopped](docs/images/main-window.png)
+
+### Mapping and input test
+
+![Mapping window showing the Twin Stick controls, the selected PS button, and its AC6 Target Assist assignment](docs/images/mapping-window.png)
+
+### In game
 
 ![TANITA VCD-18-c Twin Stick controlling an AC in ARMORED CORE VI](docs/images/twin-stick-in-game.jpg)
 

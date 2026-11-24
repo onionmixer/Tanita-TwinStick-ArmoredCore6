@@ -4,7 +4,7 @@
 
 1. Connect the TANITA VCD-18-c by USB and open `release\Tanita.exe`. The input panel should show `USB GAMESTICK / 1F4F:9001`.
 2. Check ViGEmBus status at the bottom of the window. If the driver is missing, select **Open official ViGEmBus downloads** and install it using the official installer. Return to the app after installation. [Official ViGEmBus release](https://github.com/nefarius/ViGEmBus/releases/latest)
-3. Select **ViGEmBus (Xbox 360)** and click **Start output**. Wait for **Output connected**. Close any other instance that is creating a virtual pad, including the legacy bridge.
+3. Select **ViGEmBus (Xbox 360)** and click **Start link**. Wait for **Output connected**. Close any other instance that is creating a virtual pad, including the legacy bridge.
 4. In Steam, open **ARMORED CORE VI → Properties → Controller** and enable **Steam Input** for this game. Launch AC6 and use the **Type A** controller layout. [Official AC6 controls](https://www.fromsoftware.jp/manual/armoredcore6/win/operation.html)
 5. In the garage, select **Operation → AC Test**. A new save needs to reach the garage first. For offline testing, set the game's startup mode to offline in its network settings before loading the save. [Official garage guide](https://www.fromsoftware.jp/manual/armoredcore6/win/menu1.html)
 6. Verify that the AC is stationary with both levers released. Push both forward to move, spread them to jump, and test each weapon. Click **Stop output** or close the app when finished.
@@ -34,13 +34,25 @@ AC6's Type A layout has no independent turn-in-place control for the AC. The opp
 
 ## Verify Windows input
 
+Open **Mapping or Test** to see the Twin Stick diagram and all Xbox outputs and AC6 Type A actions at once. Click a numbered marker or a row to highlight the corresponding control and draw a line between them. Green indicates live physical input. Both grip diagrams are visible. **Left grip** and **Right grip** select the corresponding trigger. The panel below the image displays the current mapped output. With output stopped, it is a preview.
+
+Select **Start input test**, release all controls, and follow the prompts for eight lever directions and 19 physical buttons. After each detected input, release it to continue. **Skip input** records a skipped step. The test checks the current bindings without editing them. Leave gamepad output stopped to run the test without sending inputs to the game.
+
+### Change a button assignment
+
+With output and the guided test stopped, choose an action under **Button Assignment (AC6)** and click **Capture input**. Release the Twin Stick controls and press one assignable physical button within four seconds. The modal shows the countdown, live lever and button values, and the detected button. If the deadline passes or you select **Cancel**, the modal displays **Input assign canceled** for one second and closes without changing the mapping. After a button is detected, select **Save mapping** to apply the assignment or **Retry** for another capture.
+
+The list and output preview reflect the saved binding, and Windows remembers it for your user account. Choose **Unassigned** and capture a button to disable it. **Restore defaults** restores the full factory mapping after confirmation.
+
+Both gray buttons on the same grip share a physical signal and therefore share one assignment. Lever gestures and the single- and dual-TURBO behavior are fixed. The editor changes the native app's mapping for both output drivers.
+
 Open `joy.cpl` from Windows Run. In the virtual gamepad's **Properties**, press the panel × button and push both levers to the right. The button and movement axis should register. Select **Xbox 360 Controller** for ViGEmBus, or the **VHF** gamepad for the custom driver. The physical **USB GAMESTICK** entry shows raw input from the Twin Stick.
 
 If the app sees the physical controller but the game does not respond, check the virtual device first. If Windows sees input and AC6 does not, verify the game's Steam Input override and controller layout.
 
 ## Custom HID driver and AC6 DSE error
 
-The locally test-signed custom driver was tested in Windows Game Controllers. On this PC, the app needed to be **Run as administrator** to open the custom driver. Select **Custom HID driver**, then **Start output**. A successful connection is shown as **Output connected**. The unsigned package produced by a local build needs an appropriate driver signature before it can be loaded.
+The locally test-signed custom driver was tested in Windows Game Controllers. On this PC, the app needed to be **Run as administrator** to open the custom driver. Select **Custom HID driver**, then **Start link**. A successful connection is shown as **Output connected**. The unsigned package produced by a local build needs an appropriate driver signature before it can be loaded.
 
 AC6 showed an Easy Anti-Cheat **Driver Signature Enforcement (DSE)** error while Windows test signing was enabled. To restore normal boot for AC6, open **Command Prompt as administrator**, run the following command, and **restart Windows**. [Microsoft TESTSIGNING instructions](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option)
 
